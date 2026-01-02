@@ -40,7 +40,7 @@ services:
       retries: 5
       timeout: 5s
     volumes:
-      - ${FOLDER_FOR_DATA:?err}/postgresql:/var/lib/postgresql/data
+      - ${FOLDER_FOR_DATA:?err}/postgresql:/var/lib/postgresql/18/data
     environment:
       - TZ=${TIMEZONE:?err}
       - POSTGRES_DB=${AUTHENTIK_DATABASE:?err}
@@ -343,7 +343,7 @@ services:
 ###########################################################################
 ###########################################################################
   prometheus:
-    image: prom/prometheus
+    image: prom/prometheus:latest
     container_name: prometheus
     restart: unless-stopped
     user: ${PUID:?err}:${PGID:?err}
@@ -537,9 +537,21 @@ services:
 
 # Comment out lines below if they are not going to use Gluetun VPN for Internet connection:
 
+      - ${WEBUI_PORT_BAZARR:?err}:6767        # WebUI Portal: Bazarr
+      - ${WEBUI_PORT_FILEBOT:?err}:5454       # WebUI Portal: Filebot
+      - ${WEBUI_PORT_HUNTARR:?err}:9705       # WebUI Portal: Huntarr
+      - ${WEBUI_PORT_JELLYFIN:?err}:8096      # WebUI Portal: Jellyfin
+      - ${WEBUI_PORT_JELLYSEERR:?err}:5055    # WebUI Portal: Jellyseerr
+      - ${WEBUI_PORT_MYLAR:?err}:8090         # WebUI Portal: Mylar3
+      - ${WEBUI_PORT_PROWLARR:?err}:9696      # WebUI Portal: Prowlarr
+      - ${WEBUI_PORT_RADARR:?err}:7878        # WebUI Portal: Radarr
       - ${WEBUI_PORT_SABNZBD:?err}:8080       # WebUI Portal: SABnzbd
+      - ${WEBUI_PORT_SONARR:?err}:8989        # WebUI Portal: Sonarr
+
       - ${WEBUI_PORT_QBITTORRENT:?err}:${WEBUI_PORT_QBITTORRENT:?err}   # WebUI Portal: qBittorrent
+
       - ${QBIT_PORT:?err}:6881                # Transmission Torrent Port
+      - ${FLARESOLVERR_PORT:?err}:8191        # Service Port: FlareSolverr
 
     volumes:
       - ${FOLDER_FOR_DATA:?err}/gluetun:/gluetun
@@ -552,20 +564,20 @@ services:
       - OPENVPN_USER=${VPN_USERNAME:?err}
       - OPENVPN_PASSWORD=${VPN_PASSWORD:?err}
       - SERVER_COUNTRIES=${SERVER_COUNTRIES}
-      - SERVER_REGIONS=${SERVER_REGIONS}
-      - SERVER_CITIES=${SERVER_CITIES}
-      - SERVER_HOSTNAMES=${SERVER_HOSTNAMES}
-      - SERVER_CATEGORIES=${SERVER_CATEGORIES}
+      # - SERVER_REGIONS=${SERVER_REGIONS}
+      # - SERVER_CITIES=${SERVER_CITIES}
+      # - SERVER_HOSTNAMES=${SERVER_HOSTNAMES}
+      # - SERVER_CATEGORIES=${SERVER_CATEGORIES}
       - FIREWALL_OUTBOUND_SUBNETS=${LOCAL_SUBNET:?err}
       - OPENVPN_CUSTOM_CONFIG=${OPENVPN_CUSTOM_CONFIG}
       - HTTP_CONTROL_SERVER_ADDRESS=:${GLUETUN_CONTROL_PORT:?err}
       - VPN_TYPE=${VPN_TYPE}
-      - VPN_ENDPOINT_IP=${VPN_ENDPOINT_IP}
-      - VPN_ENDPOINT_PORT=${VPN_ENDPOINT_PORT}
-      - WIREGUARD_PUBLIC_KEY=${WIREGUARD_PUBLIC_KEY}
+      #- VPN_ENDPOINT_IP=${VPN_ENDPOINT_IP}
+      #- VPN_ENDPOINT_PORT=${VPN_ENDPOINT_PORT}
+      #- WIREGUARD_PUBLIC_KEY=${WIREGUARD_PUBLIC_KEY}
       - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
-      - WIREGUARD_PRESHARED_KEY=${WIREGUARD_PRESHARED_KEY}
-      - WIREGUARD_ADDRESSES=${WIREGUARD_ADDRESSES}
+      #- WIREGUARD_PRESHARED_KEY=${WIREGUARD_PRESHARED_KEY}
+      #- WIREGUARD_ADDRESSES=${WIREGUARD_ADDRESSES}
       - HTTPPROXY=on
       - SHADOWSOCKS=on
     networks:
@@ -585,6 +597,10 @@ services:
     image: lscr.io/linuxserver/bazarr:latest
     container_name: bazarr
     restart: unless-stopped
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
     volumes:
       - ${FOLDER_FOR_MEDIA:?err}:/data
       - ${FOLDER_FOR_DATA:?err}/bazarr:/config
@@ -594,8 +610,9 @@ services:
       - TZ=${TIMEZONE:?err}
       - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:bazarr
       - TP_THEME=${TP_THEME:?err}
-    networks:
-      - mediastack
+    network_mode: "service:gluetun"
+#    ports:
+#      - ${WEBUI_PORT_BAZARR:?err}:6767             # Configured in Gluetun VPN container
     labels:
       - traefik.enable=true
     # ROUTERS
@@ -721,6 +738,10 @@ services:
     image: rednoah/filebot:xpra
     container_name: filebot
     restart: unless-stopped
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
     volumes:
       - ${FOLDER_FOR_MEDIA:?err}/filebot:/filebot
       - ${FOLDER_FOR_DATA:?err}/filebot:/data/filebot
@@ -731,8 +752,9 @@ services:
       - UMASK=${UMASK:?err}
       - TZ=${TIMEZONE:?err}
       - DARK_MODE=1
-    networks:
-      - mediastack
+    network_mode: "service:gluetun"
+#    ports:
+#      - ${WEBUI_PORT_FILEBOT:?err}:5454             # Configured in Gluetun VPN service
     labels:
       - traefik.enable=true
     # ROUTERS
@@ -759,13 +781,18 @@ services:
     image: ghcr.io/flaresolverr/flaresolverr:latest
     container_name: flaresolverr
     restart: unless-stopped
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
     environment:
       - LOG_LEVEL=info
       - LOG_HTML=false
       - CAPTCHA_SOLVER=none
       - TZ=${TIMEZONE:?err}
-    networks:
-      - mediastack
+    network_mode: "service:gluetun"
+#    ports:
+#      - ${FLARESOLVERR_PORT:?err}:8191             # Configured in Gluetun VPN container
     labels:
       - traefik.enable=true
     # ROUTERS
@@ -908,14 +935,19 @@ services:
   huntarr:
     image: huntarr/huntarr:latest
     container_name: huntarr
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
     volumes:
       - ${FOLDER_FOR_DATA:?err}/huntarr:/config
     environment:
       - PUID=${PUID:?err}
       - PGID=${PGID:?err}
       - TZ=${TIMEZONE:?err}
-    networks:
-      - mediastack
+    network_mode: "service:gluetun"
+#    ports:
+#      - ${WEBUI_PORT_HUNTARR:?err}:9705                # Configured in Gluetun VPN container
     labels:
       - traefik.enable=true
     # ROUTERS
@@ -943,6 +975,10 @@ services:
     image: lscr.io/linuxserver/jellyfin:latest
     container_name: jellyfin
     restart: unless-stopped
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
 # Add Configurations for GPU Hardware Rendering Here:
 #    devices:
 #      - /dev/dri/renderD128:/dev/dri/renderD128
@@ -956,8 +992,11 @@ services:
       - UMASK=${UMASK:?err}
       - TZ=${TIMEZONE:?err}
 #      - JELLYFIN_PublishedServerUrl=${LOCAL_DOCKER_IP:?err}  # Enable for DLNA - Only works on HOST Network Mode
-    networks:
-      - mediastack
+    network_mode: "service:gluetun"
+#    ports:
+#      - ${WEBUI_PORT_JELLYFIN:?err}:8096             # Configured in Gluetun VPN container
+#      - 7359:7359/udp                 # Enable for DLNA - Only works on HOST Network Mode
+#      - 1900:1900/udp                 # Enable for DLNA - Only works on HOST Network Mode
     labels:
       - traefik.enable=true
     # ROUTERS
@@ -984,8 +1023,10 @@ services:
     image: fallenbagel/jellyseerr:latest
     container_name: jellyseerr
     restart: unless-stopped
-    networks:
-      - mediastack
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
     volumes:
       - ${FOLDER_FOR_DATA:?err}/jellyseerr:/app/config
     environment:
@@ -993,6 +1034,9 @@ services:
       - PGID=${PGID:?err}
       - UMASK=${UMASK:?err}
       - TZ=${TIMEZONE:?err}
+    network_mode: "service:gluetun"
+#    ports:
+#      - ${WEBUI_PORT_JELLYSEERR:?err}:5055             # Configured in Gluetun VPN container
     labels:
       - traefik.enable=true
     # ROUTERS
@@ -1003,43 +1047,6 @@ services:
     # SERVICES
       - traefik.http.services.jellyseerr.loadbalancer.server.scheme=http
       - traefik.http.services.jellyseerr.loadbalancer.server.port=5055
-    # MIDDLEWARES
-
-###########################################################################
-###########################################################################
-##
-##  Docker Compose File: Lidarr (LinuxServer.io)
-##  Function: Music Library Manager
-##
-##  Documentation: https://docs.linuxserver.io/images/docker-lidarr
-##
-###########################################################################
-###########################################################################
-  lidarr:
-    image: lscr.io/linuxserver/lidarr:latest
-    container_name: lidarr
-    restart: unless-stopped
-    volumes:
-      - ${FOLDER_FOR_MEDIA:?err}:/data
-      - ${FOLDER_FOR_DATA:?err}/lidarr:/config
-    environment:
-      - PUID=${PUID:?err}
-      - PGID=${PGID:?err}
-      - TZ=${TIMEZONE:?err}
-      - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:lidarr
-      - TP_THEME=${TP_THEME:?err}
-    networks:
-      - mediastack
-    labels:
-      - traefik.enable=true
-    # ROUTERS
-      - traefik.http.routers.lidarr.service=lidarr
-      - traefik.http.routers.lidarr.rule=Host(`lidarr.${CLOUDFLARE_DNS_ZONE:?err}`)
-      - traefik.http.routers.lidarr.entrypoints=secureweb
-      - traefik.http.routers.lidarr.middlewares=authentik-forwardauth@file,security-headers@file,traefik-bouncer@file
-    # SERVICES
-      - traefik.http.services.lidarr.loadbalancer.server.scheme=http
-      - traefik.http.services.lidarr.loadbalancer.server.port=8686
     # MIDDLEWARES
 
 ###########################################################################
@@ -1056,6 +1063,10 @@ services:
     image: lscr.io/linuxserver/mylar3:latest
     container_name: mylar
     restart: unless-stopped
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
     volumes:
       - ${FOLDER_FOR_MEDIA:?err}:/data
       - ${FOLDER_FOR_DATA:?err}/mylar:/config
@@ -1065,8 +1076,9 @@ services:
       - TZ=${TIMEZONE:?err}
       - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:mylar3
       - TP_THEME=${TP_THEME:?err}
-    networks:
-      - mediastack
+    network_mode: "service:gluetun"
+#    ports:
+#      - ${WEBUI_PORT_MYLAR:?err}:8090             # Configured in Gluetun VPN container
     labels:
       - traefik.enable=true
     # ROUTERS
@@ -1077,49 +1089,6 @@ services:
     # SERVICES
       - traefik.http.services.mylar.loadbalancer.server.scheme=http
       - traefik.http.services.mylar.loadbalancer.server.port=8090
-    # MIDDLEWARES
-
-###########################################################################
-###########################################################################
-##
-##  Docker Compose File: Plex (LinuxServer.io)
-##  Function: Media Server
-##
-##  Documentation: https://hub.docker.com/r/linuxserver/plex
-##
-###########################################################################
-###########################################################################
-  plex:
-    image: lscr.io/linuxserver/plex:latest
-    container_name: plex
-    restart: unless-stopped
-# Add Configurations for GPU Hardware Rendering Here:
-#    devices:
-#      - /dev/dri/renderD128:/dev/dri/renderD128
-#      - /dev/dri/card0:/dev/dri/card0
-    networks:
-      - mediastack
-    volumes:
-      - ${FOLDER_FOR_MEDIA:?err}/media:/data/media
-      - ${FOLDER_FOR_DATA:?err}/plex:/config
-    environment:
-      - PUID=${PUID:?err}
-      - PGID=${PGID:?err}
-      - UMASK=${UMASK:?err}
-      - TZ=${TIMEZONE:?err}
-      - VERSION=docker
-      - PLEX_CLAIM=${PLEX_CLAIM}
-      - ADVERTISE_IP=https://plex.${CLOUDFLARE_DNS_ZONE:?err}:443/
-    labels:
-      - traefik.enable=true
-    # ROUTERS
-      - traefik.http.routers.plex.service=plex
-      - traefik.http.routers.plex.rule=Host(`plex.${CLOUDFLARE_DNS_ZONE:?err}`) && PathPrefix(`/web/`)
-      - traefik.http.routers.plex.entrypoints=secureweb
-      - traefik.http.routers.plex.middlewares=authentik-forwardauth@file,security-headers@file,traefik-bouncer@file
-    # SERVICES
-      - traefik.http.services.plex.loadbalancer.server.scheme=http
-      - traefik.http.services.plex.loadbalancer.server.port=32400
     # MIDDLEWARES
 
 ###########################################################################
@@ -1167,9 +1136,13 @@ services:
 ###########################################################################
 ###########################################################################
   prowlarr:
-    image: lscr.io/linuxserver/prowlarr:develop
+    image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr
     restart: unless-stopped
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
     volumes:
       - ${FOLDER_FOR_DATA:?err}/prowlarr:/config
     environment:
@@ -1178,8 +1151,9 @@ services:
       - TZ=${TIMEZONE:?err}
       - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:prowlarr
       - TP_THEME=${TP_THEME:?err}
-    networks:
-      - mediastack
+    network_mode: "service:gluetun"
+#    ports:
+#      - ${WEBUI_PORT_PROWLARR:?err}:9696             # Configured in Gluetun VPN container
     labels:
       - traefik.enable=true
     # ROUTERS
@@ -1250,6 +1224,10 @@ services:
     image: lscr.io/linuxserver/radarr:latest
     container_name: radarr
     restart: unless-stopped
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
     volumes:
       - ${FOLDER_FOR_MEDIA:?err}:/data
       - ${FOLDER_FOR_DATA:?err}/radarr:/config
@@ -1259,8 +1237,9 @@ services:
       - TZ=${TIMEZONE:?err}
       - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:radarr
       - TP_THEME=${TP_THEME:?err}
-    networks:
-      - mediastack
+    network_mode: "service:gluetun"
+#    ports:
+#      - ${WEBUI_PORT_RADARR:?err}:7878             # Configured in Gluetun VPN container
     labels:
       - traefik.enable=true
     # ROUTERS
@@ -1271,43 +1250,6 @@ services:
     # SERVICES
       - traefik.http.services.radarr.loadbalancer.server.scheme=http
       - traefik.http.services.radarr.loadbalancer.server.port=7878
-    # MIDDLEWARES
-
-###########################################################################
-###########################################################################
-##
-##  Docker Compose File: Readarr (LinuxServer.io)
-##  Function: Book Library Manager
-##
-##  Documentation: https://docs.linuxserver.io/images/docker-readarr
-##
-###########################################################################
-###########################################################################
-  readarr:
-    image: lscr.io/linuxserver/readarr:develop
-    container_name: readarr
-    restart: unless-stopped
-    volumes:
-      - ${FOLDER_FOR_MEDIA:?err}:/data
-      - ${FOLDER_FOR_DATA:?err}/readarr:/config
-    environment:
-      - PUID=${PUID:?err}
-      - PGID=${PGID:?err}
-      - TZ=${TIMEZONE:?err}
-      - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:readarr
-      - TP_THEME=${TP_THEME:?err}
-    networks:
-      - mediastack
-    labels:
-      - traefik.enable=true
-    # ROUTERS
-      - traefik.http.routers.readarr.service=readarr
-      - traefik.http.routers.readarr.rule=Host(`readarr.${CLOUDFLARE_DNS_ZONE:?err}`)
-      - traefik.http.routers.readarr.entrypoints=secureweb
-      - traefik.http.routers.readarr.middlewares=authentik-forwardauth@file,security-headers@file,traefik-bouncer@file
-    # SERVICES
-      - traefik.http.services.readarr.loadbalancer.server.scheme=http
-      - traefik.http.services.readarr.loadbalancer.server.port=8787
     # MIDDLEWARES
 
 ###########################################################################
@@ -1366,6 +1308,10 @@ services:
     image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
     restart: unless-stopped
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
     volumes:
       - ${FOLDER_FOR_MEDIA:?err}:/data
       - ${FOLDER_FOR_DATA:?err}/sonarr:/config
@@ -1375,8 +1321,9 @@ services:
       - TZ=${TIMEZONE:?err}
       - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:sonarr
       - TP_THEME=${TP_THEME:?err}
-    networks:
-      - mediastack
+    network_mode: "service:gluetun"
+#    ports:
+#      - ${WEBUI_PORT_SONARR:?err}:8989             # Configured in Gluetun VPN container
     labels:
       - traefik.enable=true
     # ROUTERS
@@ -1405,6 +1352,10 @@ services:
     image: ghcr.io/haveagitgat/tdarr:latest
     container_name: tdarr
     restart: unless-stopped
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
     volumes:
       - ${FOLDER_FOR_MEDIA:?err}/media:/data
       - ${FOLDER_FOR_DATA:?err}/tdarr/server:/app/server
@@ -1421,8 +1372,10 @@ services:
       - webUIPort=${WEBUI_PORT_TDARR:?err}
       - internalNode=true
       - nodeID=Tdarr_Server
-    networks:
-      - mediastack
+    network_mode: "service:gluetun"
+#    ports:
+#      - ${TDARR_SERVER_PORT:?err}:${TDARR_SERVER_PORT:?err}      # Configured in Gluetun VPN container
+#      - ${WEBUI_PORT_TDARR:?err}:${WEBUI_PORT_TDARR:?err}        # Configured in Gluetun VPN container
     labels:
       - traefik.enable=true
     # ROUTERS
@@ -1439,6 +1392,10 @@ services:
     image: ghcr.io/haveagitgat/tdarr_node:latest
     container_name: tdarr-node
     restart: unless-stopped
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
     volumes:
       - ${FOLDER_FOR_MEDIA:?err}/media:/data
       - ${FOLDER_FOR_DATA:?err}/tdarr/configs:/app/configs
@@ -1452,8 +1409,52 @@ services:
       - nodeID=Tdarr_Node_1
       - serverIP=0.0.0.0
       - serverPort=${TDARR_SERVER_PORT:?err}
-    networks:
-      - mediastack
+    network_mode: "service:gluetun"
+
+###########################################################################
+###########################################################################
+##
+##  Docker Compose File: Whisparr (DISABLED - No Public Docker Image)
+##  Function: Adult Media Library Manager
+##
+##  DISABLED: Whisparr does not currently have a reliable public Docker image.
+##  The official Servarr wiki recommends hotio/whisparr, which is unavailable.
+##  Container commented out - enable when a stable image is available.
+##
+##  Documentation: https://wiki.servarr.com/whisparr/installation/docker
+##
+###########################################################################
+###########################################################################
+  # whisparr:
+  #   image: ghcr.io/servarr/whisparr:nightly
+  #   container_name: whisparr
+  #   restart: unless-stopped
+  #   depends_on:
+  #     gluetun:
+  #       condition: service_healthy
+  #       restart: true
+  #   volumes:
+  #     - ${FOLDER_FOR_MEDIA:?err}:/data
+  #     - ${FOLDER_FOR_DATA:?err}/whisparr:/config
+  #   environment:
+  #     - PUID=${PUID:?err}
+  #     - PGID=${PGID:?err}
+  #     - UMASK=${UMASK:?err}
+  #     - TZ=${TIMEZONE:?err}
+  #   network_mode: "service:gluetun"
+  # #    ports:
+  # #      - ${WEBUI_PORT_WHISPARR:?err}:6969             # Configured in Gluetun VPN container
+  #   labels:
+  #     - traefik.enable=true
+  #   # ROUTERS
+  #     - traefik.http.routers.whisparr.service=whisparr
+  #     - traefik.http.routers.whisparr.rule=Host(`whisparr.${CLOUDFLARE_DNS_ZONE:?err}`)
+  #     - traefik.http.routers.whisparr.entrypoints=secureweb
+  #     - traefik.http.routers.whisparr.middlewares=authentik-forwardauth@file,security-headers@file,traefik-bouncer@file
+  #   # SERVICES
+  #     - traefik.http.services.whisparr.loadbalancer.server.scheme=http
+  #     - traefik.http.services.whisparr.loadbalancer.server.port=6969
+  #   # MIDDLEWARES
 
 ###########################################################################
 ###########################################################################
@@ -1467,7 +1468,7 @@ services:
 ###########################################################################
 ###########################################################################
   unpackerr:
-    image: golift/unpackerr
+    image: golift/unpackerr:latest
     container_name: unpackerr
     restart: unless-stopped
     user: ${PUID:?err}:${PGID:?err}
@@ -1544,36 +1545,6 @@ services:
       - UN_RADARR_0_DELETE_DELAY=5m
       - UN_RADARR_0_DELETE_ORIG=false
       - UN_RADARR_0_SYNCTHING=false
-      ## Lidarr Settings
-      ## Lidarr Config - Copy API Key from: http://lidarr:8686/general/settings
-      - UN_LIDARR_0_URL=http://lidarr:8686
-      - UN_LIDARR_0_API_KEY=0123456789abcdef0123456789abcdef
-      - UN_LIDARR_0_PATHS_0=/data/torrents/music
-      - UN_LIDARR_0_PROTOCOLS=torrent
-      - UN_LIDARR_0_TIMEOUT=10s
-      - UN_LIDARR_0_DELETE_DELAY=5m
-      - UN_LIDARR_0_DELETE_ORIG=false
-      - UN_LIDARR_0_SYNCTHING=false
-      ## Readarr Settings
-      ## Readarr Config - Copy API Key from: http://readarr:8787/general/settings
-      - UN_READARR_0_URL=http://readarr:8787
-      - UN_READARR_0_API_KEY=0123456789abcdef0123456789abcdef
-      - UN_READARR_0_PATHS_0=/data/torrents/books
-      - UN_READARR_0_PROTOCOLS=torrent
-      - UN_READARR_0_TIMEOUT=10s
-      - UN_READARR_0_DELETE_DELAY=5m
-      - UN_READARR_0_DELETE_ORIG=false
-      - UN_READARR_0_SYNCTHING=false
-      ## Whisparr Settings
-      ## Whisparr Config - Copy API Key from: http://readarr:6969/general/settings
-      - UN_WHISPARR_0_URL=http://whisparr:6969
-      - UN_WHISPARR_0_API_KEY=0123456789abcdef0123456789abcdef
-      - UN_WHISPARR_0_PATHS_0=/data/torrents/xxx
-      - UN_WHISPARR_0_PROTOCOLS=torrent
-      - UN_WHISPARR_0_TIMEOUT=10s
-      - UN_WHISPARR_0_DELETE_DELAY=5m
-      - UN_WHISPARR_0_DELETE_ORIG=false
-      - UN_WHISPARR_0_SYNCTHING=false
       ## Watch Folders
       - UN_FOLDER_0_PATH=/data/torrents/complete
       - UN_FOLDER_0_EXTRACT_PATH=
@@ -1611,39 +1582,3 @@ services:
       - UN_CMDHOOK_0_EXCLUDE_0=readarr
       - UN_CMDHOOK_0_EXCLUDE_1=lidarr
       - UN_CMDHOOK_0_TIMEOUT=10s
-
-###########################################################################
-###########################################################################
-##
-##  Docker Compose File: Whisparr (Hotio.Dev)
-##  Function: Adult Media Library Manager
-##
-##  Documentation: https://wiki.servarr.com/whisparr
-##
-###########################################################################
-###########################################################################
-  whisparr:
-    image: hotio/whisparr:nightly
-    container_name: whisparr
-    restart: unless-stopped
-    volumes:
-      - ${FOLDER_FOR_MEDIA:?err}:/data
-      - ${FOLDER_FOR_DATA:?err}/whisparr:/config
-    environment:
-      - PUID=${PUID:?err}
-      - PGID=${PGID:?err}
-      - UMASK=${UMASK:?err}
-      - TZ=${TIMEZONE:?err}
-    networks:
-      - mediastack
-    labels:
-      - traefik.enable=true
-    # ROUTERS
-      - traefik.http.routers.whisparr.service=whisparr
-      - traefik.http.routers.whisparr.rule=Host(`whisparr.${CLOUDFLARE_DNS_ZONE:?err}`)
-      - traefik.http.routers.whisparr.entrypoints=secureweb
-      - traefik.http.routers.whisparr.middlewares=authentik-forwardauth@file,security-headers@file,traefik-bouncer@file
-    # SERVICES
-      - traefik.http.services.whisparr.loadbalancer.server.scheme=http
-      - traefik.http.services.whisparr.loadbalancer.server.port=6969
-    # MIDDLEWARES

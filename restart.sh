@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 set -e
 
-FOLDER_FOR_YAMLS=/docker             # <-- Folder where the yaml and .env files are located
+FOLDER_FOR_YAMLS=/docker/mediastack      # <-- Folder where the yaml and .env files are located
 
 # Check if .env exists
 cd $FOLDER_FOR_YAMLS
